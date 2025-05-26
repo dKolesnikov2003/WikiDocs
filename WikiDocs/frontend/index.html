@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Dedoc → Wiki.js uploader</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #b9e0ff 100%);
+            overflow: hidden;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            z-index: 0;
+            inset: 0;
+            background: radial-gradient(circle at 25% 30%, #b2aaff 20%, transparent 70%),
+                        radial-gradient(circle at 75% 80%, #ffced9 20%, transparent 70%);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #app {
+            display: flex;
+            height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+        #tree {
+            flex: 0 0 300px;
+            min-width: 180px;
+            max-width: 550px;
+            overflow-y: auto;
+            background: linear-gradient(135deg, #85aaff 0%, #ffffff 100%);
+            border-right: 1.5px solid #d0e3fa;
+            box-shadow: 2px 0 10px 0 rgba(110, 165, 255, 0.07);
+            padding: 1.5rem 1rem;
+            transition: flex-basis 0.2s;
+        }
+        #resizer {
+            width: 7px;
+            cursor: ew-resize;
+            background: linear-gradient(135deg, #b6c9ff 0%, #9bcedf 100%);
+            z-index: 10;
+            position: relative;
+            transition: background 0.2s;
+        }
+        #resizer:hover {
+            background: linear-gradient(135deg, #6696ff 0%, #3ec8ff 100%);
+        }
+        #content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 2.7rem 2rem 1.5rem 2rem;
+            align-items: center;
+            justify-content: flex-start;
+            min-width: 0;
+        }
+        #loginFormContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            position: fixed;
+            left: 0; top: 0; z-index: 20;
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(1.5px);
+        }
+        #loginForm {
+            background: #fff;
+            padding: 2.5rem 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 8px 36px #a9c4ff22;
+            min-width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2em;
+            align-items: center;
+        }
+        #loginForm h2 {
+            font-size: 1.7em;
+            margin-bottom: 0.8em;
+            color: #4260ba;
+        }
+        #loginForm input {
+            width: 100%;
+            font-size: 1.05em;
+            padding: 0.8em 1.1em;
+            border: 1.5px solid #c1ccf0;
+            border-radius: 0.7em;
+            outline: none;
+            margin-bottom: 0.3em;
+        }
+        #loginForm button {
+            width: 100%;
+            background: linear-gradient(90deg, #61e1fe 0%, #9c7fff 100%);
+            color: #fff;
+            border: none;
+            font-weight: 700;
+            padding: 0.9em;
+            border-radius: 1.1em;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin-top: 0.5em;
+        }
+        #loginError {
+            color: #fa6b6b;
+            font-weight: 600;
+            font-size: 1em;
+            text-align: center;
+        }
+        #logoutBtn {
+            position: absolute;
+            top: 1.7rem;
+            right: 2.2rem;
+            background: transparent;
+            border: none;
+            color: #6d77bc;
+            font-size: 1.16em;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0.4em 1em;
+            transition: color 0.2s;
+        }
+        #logoutBtn:hover { color: #fa6b6b; }
+
+        #uploadForm {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        /* === Тонкая, тусклая неоновая рамка (бирюзово-мятная) === */
+        .drop-area-neo {
+            background: #fafdff;
+            border-radius: 1.2em;
+            min-width: 340px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 1.3em;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 0 0 2px #58fff9, 0 0 9px 2px #40fff222;
+            padding: 2em 1.1em 1.7em 1.1em;
+            overflow: visible;
+            z-index: 1;
+            transition: box-shadow 0.25s cubic-bezier(.56,.06,.42,.99), background 0.16s;
+        }
+        .drop-area-neo::before {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            border-radius: 1.4em;
+            pointer-events: none;
+            z-index: 2;
+            box-shadow:
+                0 0 7px 2px #40fffc33,
+                0 0 16px 5px #70fff822;
+            opacity: 0.28;
+            filter: blur(0.4px);
+            animation: neonPulse 2.4s ease-in-out infinite alternate;
+        }
+        .drop-area-neo.dragover,
+        .drop-area-neo:focus-within,
+        .drop-area-neo:hover {
+            background: #e9fffa;
+            box-shadow: 0 0 0 3px #40fff2, 0 0 18px 5px #40fff935;
+        }
+        .drop-area-neo.dragover::before,
+        .drop-area-neo:focus-within::before,
+        .drop-area-neo:hover::before {
+            box-shadow:
+                0 0 10px 2px #40f5ff5e,
+                0 0 18px 5px #70e7ff55;
+            opacity: 0.45;
+        }
+        @keyframes neonPulse {
+            from {
+                box-shadow:
+                    0 0 7px 2px #40ffff33,
+                    0 0 16px 5px #70ecff22;
+                opacity: 0.24;
+            }
+            to {
+                box-shadow:
+                    0 0 12px 3px #b8fff782,
+                    0 0 19px 6px #d2fff170;
+                opacity: 0.38;
+            }
+        }
+
+        .drop-icon-neo {
+            font-size: 3.2em;
+            color: #53b9ff;
+            margin-bottom: 0.1em;
+            animation: floatIcon 1.6s ease-in-out infinite alternate;
+            position: relative;
+            z-index: 4;
+        }
+        @keyframes floatIcon {
+            from { transform: translateY(0px);}
+            to   { transform: translateY(-13px);}
+        }
+        .drop-message-neo {
+            color: #337fc3;
+            font-weight: 700;
+            font-size: 1.23em;
+            margin-bottom: 0.4em;
+            letter-spacing: 0.01em;
+            position: relative;
+            z-index: 4;
+        }
+        .drop-message-neo .link {
+            color: #32baff;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .file-info-neo {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            gap: 13px;
+            margin-top: 1.2em;
+            margin-bottom: 0.7em;
+            color: #295193;
+            font-size: 1.05em;
+            background: #e8f3ff;
+            border-radius: 1.3em;
+            padding: 0.58em 1.4em;
+            box-shadow: 0 1px 12px #b9eaff15;
+            animation: fadein 0.7s;
+            position: relative;
+            z-index: 4;
+        }
+        .remove-file-btn-neo {
+            background: #fff1f6;
+            border: none;
+            border-radius: 1.3em;
+            color: #fd5d90;
+            padding: 0.33em 0.85em;
+            position: absolute;
+            top: 13px; right: 18px;
+            cursor: pointer;
+            font-size: 1.1em;
+            box-shadow: 0 1px 8px #ffb3d225;
+            transition: background 0.2s, color 0.2s;
+            z-index: 5;
+        }
+        .remove-file-btn-neo:hover {
+            background: #ffd7e2;
+            color: #e42965;
+        }
+        #fileInput {
+            display: none;
+        }
+        .progress-container {
+            width: 100%;
+            max-width: 420px;
+            min-width: 240px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 9px;
+            background: #e7fafd;
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 1.2em;
+            margin-top: 0.2em;
+            position: relative;
+            box-shadow: 0 2px 18px #87f3ff46, 0 0px 6px #49e9ff17;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            border-radius: 14px;
+            position: relative;
+            background: linear-gradient(90deg, #4fcbff 10%, #80f7ff 50%, #7b78fa 90%);
+            box-shadow: 0 0 16px 3px #60f3ffc0, 0 2px 8px #70f4ffe7;
+            transition: width 0.44s cubic-bezier(.24,.99,.31,.94);
+            overflow: visible;
+        }
+        .progress-bar::after {
+            content: "";
+            display: block;
+            position: absolute;
+            top: -5px;
+            left: 0;
+            width: 60px;
+            height: 18px;
+            background: linear-gradient(120deg, transparent 20%, #fff 52%, transparent 75%);
+            opacity: 0.42;
+            filter: blur(1.2px);
+            animation: progressShine 1s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes progressShine {
+            0% { left: -60px; }
+            100% { left: 100%; }
+        }
+        .progress-bar.complete {
+            background: linear-gradient(90deg, #00f2ff 10%, #8bfff8 50%, #59ecff 90%);
+            box-shadow: 0 0 40px 8px #32fffac0, 0 0px 16px #00fffce9;
+        }
+        button[type=submit] {
+            background: linear-gradient(90deg, #61e1fe 0%, #9c7fff 100%);
+            color: #fff;
+            border: none;
+            font-weight: 700;
+            padding: 0.85em 2.5em;
+            border-radius: 2em;
+            font-size: 1.15em;
+            cursor: pointer;
+            transition:
+                background 0.45s cubic-bezier(.4,1,.6,1),
+                box-shadow 0.42s cubic-bezier(.4,1,.6,1),
+                transform 0.45s cubic-bezier(.2,.9,.3,1);
+            margin-bottom: 0.3em;
+            margin-top: 0.6em;
+            box-shadow: 0 4px 14px #b4e6ff3a;
+            align-self: center;
+            min-width: 270px;
+        }
+        button[type=submit]:hover {
+            background: linear-gradient(90deg, #4ff8cc 0%, #48f2fe 80%, #a684fa 100%);
+            box-shadow: 0 0 36px 4px #77fbe7a9, 0 8px 40px #b8f3ffd1;
+            transform: scale(1.045);
+        }
+        #status {
+            margin-top: 1rem;
+            min-height: 1.6em;
+            font-weight: 600;
+            color: #63b078;
+            text-align: center;
+            letter-spacing: 0.01em;
+        }
+        #status.error {
+            color: #ff989e;
+        }
+        ul.tree {
+            list-style: none;
+            padding-left: 0.5rem;
+            margin: 0;
+        }
+        ul.tree li {
+            cursor: pointer;
+            margin: 4px 0;
+            padding: 8px 14px;
+            border-radius: 1em;
+            transition: background 0.15s;
+            font-weight: 500;
+            color: #3e3a7d;
+        }
+        ul.tree li.selected,
+        ul.tree li:hover {
+            background: linear-gradient(90deg, #6f7afc 30%, #57c6ff 100%);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+<div id="loginFormContainer" style="display:none;">
+    <form id="loginForm" autocomplete="off">
+        <h2><i class="bi bi-person-circle"></i> Авторизация</h2>
+        <input type="text" id="username" placeholder="Имя пользователя" autocomplete="username" required>
+        <input type="password" id="password" placeholder="Пароль" autocomplete="current-password" required>
+        <button type="submit">Войти</button>
+        <div id="loginError"></div>
+    </form>
+</div>
+<div id="app" style="display:none;">
+    <div id="tree"></div>
+    <div id="resizer"></div>
+    <div id="content">
+        <button id="logoutBtn" title="Выйти" type="button"><i class="bi bi-box-arrow-right"></i> Выйти</button>
+        <h2>Загрузка файла в Wiki.js</h2>
+        <form id="uploadForm" autocomplete="off">
+            <div id="dropArea" class="drop-area-neo" tabindex="0">
+                <input type="file" id="fileInput" name="file" required>
+                <div class="drop-icon-neo"><i class="bi bi-cloud-arrow-up"></i></div>
+                <div id="dropMessage" class="drop-message-neo">
+                    <span id="fileDropText">Перетащите файл сюда или <span class="link">выберите</span></span>
+                </div>
+                <div class="file-info-neo" id="fileInfo" style="display:none;"></div>
+                <button type="button" class="remove-file-btn-neo" id="removeFileBtn" style="display:none;">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="progress-container" style="display:none;">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <button type="submit" style="margin-top:1em">
+                Загрузить в выбранный раздел
+            </button>
+        </form>
+        <div id="status"></div>
+    </div>
+</div>
+<script>
+    // ---------- Авторизация ----------
+    function getToken() {
+        return localStorage.getItem('token');
+    }
+    function setToken(token) {
+        localStorage.setItem('token', token);
+    }
+    function removeToken() {
+        localStorage.removeItem('token');
+    }
+    function showLogin() {
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('loginFormContainer').style.display = 'flex';
+        document.getElementById('loginError').textContent = '';
+    }
+    function showApp() {
+        document.getElementById('loginFormContainer').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+    }
+    async function verifyToken() {
+        const token = getToken();
+        if (!token) return false;
+        try {
+            const resp = await fetch('/api/user', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resp.ok) return true;
+        } catch {}
+        return false;
+    }
+    window.addEventListener('DOMContentLoaded', async () => {
+        if (await verifyToken()) {
+            showApp();
+            initApp();
+        } else {
+            showLogin();
+        }
+    });
+    document.getElementById('loginForm').addEventListener('submit', async function(e){
+        e.preventDefault();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const loginError = document.getElementById('loginError');
+        loginError.textContent = '';
+        try {
+            const resp = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({username, password})
+            });
+            const data = await resp.json();
+            if (resp.ok && data.token) {
+                setToken(data.token);
+                showApp();
+                initApp();
+            } else {
+                loginError.textContent = data.detail || 'Ошибка авторизации';
+            }
+        } catch (err) {
+            loginError.textContent = 'Ошибка сети: ' + err.message;
+        }
+    });
+    document.getElementById('logoutBtn').addEventListener('click', function() {
+        removeToken();
+        showLogin();
+    });
+    function fetchAuth(url, opts={}) {
+        opts.headers = opts.headers || {};
+        opts.headers['Authorization'] = 'Bearer ' + getToken();
+        return fetch(url, opts);
+    }
+
+    // --------------- Основная логика приложения (документы, загрузка, дерево и т.д.) ---------------
+    function initApp() {
+        // Логика ресайзера
+        const tree = document.getElementById('tree');
+        const resizer = document.getElementById('resizer');
+        const app = document.getElementById('app');
+        let isResizing = false;
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            document.body.style.userSelect = 'none';
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            let newWidth = e.clientX - app.getBoundingClientRect().left;
+            newWidth = Math.max(180, Math.min(550, newWidth));
+            tree.style.flex = `0 0 ${newWidth}px`;
+        });
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // Drag&Drop поле загрузки
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileDropText = document.getElementById('fileDropText');
+        const fileInfo = document.getElementById('fileInfo');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+
+        // Фикс D&D и блокировки событий на дочерних элементах
+        dropArea.addEventListener('click', (e) => {
+            if (
+                e.target === fileDropText.querySelector('.link') ||
+                e.target === removeFileBtn
+            ) return;
+            fileInput.click();
+        });
+
+        // Перехватываем drop и drag* только на dropArea
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropArea.addEventListener(evt, (e) => {
+                e.preventDefault(); e.stopPropagation();
+                dropArea.classList.add('dragover');
+            });
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            dropArea.addEventListener(evt, (e) => {
+                e.preventDefault(); e.stopPropagation();
+                dropArea.classList.remove('dragover');
+            });
+        });
+        dropArea.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileChange();
+            }
+        });
+
+        // Предотвращаем браузерное открытие файла
+        window.addEventListener("dragover", e => e.preventDefault(), false);
+        window.addEventListener("drop", e => e.preventDefault(), false);
+
+        // Открыть выбор по клику на "выберите"
+        fileDropText.querySelector('.link').onclick = (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        };
+
+        // Отображение файла
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' Байт';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' КБ';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(2) + ' МБ';
+            return (bytes/1024/1024/1024).toFixed(2) + ' ГБ';
+        }
+        function handleFileChange() {
+            if (!fileInput.files.length) {
+                fileInfo.style.display = 'none';
+                fileDropText.innerHTML = 'Перетащите файл сюда или <span class="link">выберите</span>';
+                removeFileBtn.style.display = 'none';
+                return;
+            }
+            const file = fileInput.files[0];
+            fileInfo.innerHTML = `<i class="bi bi-file-earmark-text" style="font-size:1.25em"></i>
+                <b>${file.name}</b>
+                <span style="font-weight:400;">(${formatSize(file.size)})</span>`;
+            fileInfo.style.display = 'flex';
+            fileDropText.innerHTML = 'Файл выбран: <span style="color:#32baff">' + file.name + '</span>';
+            removeFileBtn.style.display = '';
+        }
+        fileInput.addEventListener('change', handleFileChange);
+        removeFileBtn.onclick = (e) => {
+            e.stopPropagation();
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            fileDropText.innerHTML = 'Перетащите файл сюда или <span class="link">выберите</span>';
+            removeFileBtn.style.display = 'none';
+        };
+
+        // Дерево разделов и загрузка
+        const progressContainer = document.querySelector('.progress-container');
+        const progressBar = document.getElementById('progressBar');
+        let selectedPath = '/';
+        const treeEl = document.getElementById('tree');
+        treeEl.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'li') {
+                const prev = treeEl.querySelector('li.selected');
+                if (prev) prev.classList.remove('selected');
+                e.target.classList.add('selected');
+                selectedPath = e.target.dataset.path || '/';
+            }
+        });
+        const form = document.getElementById('uploadForm');
+        const statusEl = document.getElementById('status');
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (!fileInput.files.length) {
+                statusEl.textContent = 'Сначала выберите файл!';
+                statusEl.classList.add('error');
+                return;
+            }
+            statusEl.classList.remove('error');
+            statusEl.textContent = '';
+            progressContainer.style.display = '';
+            progressBar.style.width = '0';
+            progressBar.classList.remove('complete');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('parent_path', selectedPath);
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/upload', true);
+                xhr.setRequestHeader('Authorization', 'Bearer ' + getToken());
+                xhr.upload.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        let percent = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = percent + '%';
+                    }
+                };
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState == 4) {
+                        progressBar.style.width = '100%';
+                        progressBar.classList.add('complete');
+                        let resp;
+                        try {
+                            resp = JSON.parse(xhr.responseText);
+                        } catch {
+                            resp = {message: xhr.statusText};
+                        }
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            statusEl.textContent = resp.message || 'Файл успешно загружен!';
+                            statusEl.classList.remove('error');
+                        } else {
+                            statusEl.textContent = resp.detail || resp.message || 'Ошибка загрузки';
+                            statusEl.classList.add('error');
+                        }
+                        setTimeout(() => {
+                            progressContainer.style.display = 'none';
+                            progressBar.style.width = '0';
+                            progressBar.classList.remove('complete');
+                        }, 1300);
+                        fileInput.value = '';
+                        fileInfo.style.display = 'none';
+                        fileDropText.innerHTML = 'Перетащите файл сюда или <span class="link">выберите</span>';
+                        removeFileBtn.style.display = 'none';
+                        fetchTree();
+                    }
+                };
+                xhr.send(formData);
+            } catch (err) {
+                statusEl.textContent = 'Ошибка загрузки: ' + err.message;
+                statusEl.classList.add('error');
+                progressContainer.style.display = 'none';
+            }
+        });
+
+        // ------ Динамическое дерево ------
+        async function fetchTree() {
+            const resp = await fetchAuth('/api/tree');
+            if (!resp.ok) {
+                treeEl.innerHTML =
+                  '<div style="color:#b5b5b5; padding:1em; text-align:center;">Не удалось загрузить разделы</div>';
+                return;
+            }
+            const data = await resp.json();
+            treeEl.innerHTML = buildTreeHtml(data.tree || []);
+            attachTreeHandlers();
+        }
+        function buildTreeHtml(nodes) {
+            function renderNode(node) {
+                let li = `<li data-path="${node.path}">${node.title}`;
+                if (node.children && node.children.length) {
+                    li += `<ul class="tree">${node.children.map(renderNode).join('')}</ul>`;
+                }
+                li += `</li>`;
+                return li;
+            }
+            return `<ul class="tree">${nodes.map(renderNode).join('')}</ul>`;
+        }
+        function attachTreeHandlers() {
+            treeEl.addEventListener('click', function(e) {
+                if (e.target.tagName.toLowerCase() === 'li') {
+                    const prev = treeEl.querySelector('li.selected');
+                    if (prev) prev.classList.remove('selected');
+                    e.target.classList.add('selected');
+                    selectedPath = e.target.dataset.path || '/';
+                }
+            });
+        }
+        fetchTree();
+    }
+</script>
+</body>
+</html>

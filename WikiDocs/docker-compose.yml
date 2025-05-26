@@ -1,0 +1,76 @@
+# ---------- docker-compose.yml ----------
+# Полный стек из 4 сервисов:
+#   • postgres  – БД для Wiki.js
+#   • wikijs    – сам Wiki.js (порт 3000)
+#   • dedoc     – сервис конвертации (порт 1231)
+#   • uploader  – наш FastAPI backend + статичный фронт (порт 8000)
+#
+# Все контейнеры объединены в приватную сеть "backend", поэтому сервисы
+# видят друг друга по именам:  http://wiki:3000  ,  http://dedoc:1231 , etc.
+# ----------------------------------------
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: wiki_postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  wikijs:
+    image: requarks/wiki:2
+    container_name: wiki
+    depends_on:
+      - postgres
+    restart: always
+    environment:
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASS=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - UPGRADE_ALTER=false
+      - PGSSLMODE=disable
+    ports:
+      - "3000:3000"   # внеш.порт : внутр.порт
+    networks:
+      - backend
+
+  dedoc:
+    image: dedocproject/dedoc:latest
+    container_name: dedoc
+    restart: always
+    ports:
+      - "1231:1231"
+    networks:
+      - backend
+
+  uploader:
+    build:
+      context: .
+    container_name: uploader
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - dedoc
+      - wikijs
+    ports:
+      - "8000:8000"
+    networks:
+      - backend
+
+volumes:
+  pgdata:
+
+networks:
+  backend:
